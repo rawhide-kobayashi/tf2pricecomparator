@@ -18,13 +18,16 @@ for keys in bp_spreadsheet['response']['items']:
             quality = values
             for keys in bp_spreadsheet['response']['items'][item_name]['prices'][quality]['Tradable']:
                 craftability = keys
+                print(item_name, defindex, quality, craftability)
+
+                """
                 if isinstance(bp_spreadsheet['response']['items'][item_name]['prices'][quality]['Tradable'][craftability], list) == True:
                     print(item_name, defindex, quality, craftability)
 
-                #do i care about catalogging the individual unusual effects of any given hat,
-                #since bp classifieds can just search for all unusuals of a given hat, and steam market
-                #doesn't differentiate in the first place?
-                """
+                do i care about catalogging the individual unusual effects of any given hat,
+                since bp classifieds can just search for all unusuals of a given hat, and steam market
+                doesn't differentiate in the first place?
+                
                 else:
                     for keys in bp_spreadsheet['response']['items'][item_name]['prices'][quality]['Tradable'][craftability]:
                         unusual_effect = keys
