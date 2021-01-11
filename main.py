@@ -2,26 +2,27 @@ import json
 import requests
 import sqlite3
 
+qualities = ('Normal', 'Genuine', 'Unused', 'Vintage', 'Unused', 'Unusual', 'Unique', 'Community', 'Valve', 'Self-Made', 'Unused', 'Strange', 'Unused', 'Haunted', 'Collector\'s', 'Decorated')
 
 # import test json file
-# with open('test data set.json') as json_transient:
-#    bp_spreadsheet = json.load(json_transient)
-#    del json_transient
+with open('test data set.json') as json_transient:
+   bp_spreadsheet = json.load(json_transient)
+   del json_transient
 
 with open('settings.json') as json_transient:
     settings = json.load(json_transient)
     del json_transient
 
-url = 'https://backpack.tf/api/IGetPrices/v4?key=' + settings['API_Keys']['backpack.tf']
+# url = 'https://backpack.tf/api/IGetPrices/v4?key=' + settings['API_Keys']['backpack.tf']
 
-json_transient = requests.get(url)
-bp_spreadsheet = json_transient.json()
-del json_transient
+# json_transient = requests.get(url)
+# bp_spreadsheet = json_transient.json()
+# del json_transient
 
 conn = sqlite3.connect('pricesheet.db')
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS common_items (
-            defindex integer PRIMARY KEY,
+            defindex integer NOT NULL,
             item_name text NOT NULL,
             quality integer NOT NULL,
             craftability text NOT NULL)''')
@@ -39,8 +40,9 @@ for keys in bp_spreadsheet['response']['items']:
                 for keys in bp_spreadsheet['response']['items'][item_name]['prices'][quality]['Tradable']:
                     craftability = keys
                     print(item_name, defindex, quality, craftability)
-                    dbtuple = [(defindex, item_name, quality, craftability)]
-                    c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?)', (defindex, item_name, quality, craftability))
+                    print(int(quality))
+                    print(qualities[int(quality)])
+                    c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?)', (defindex, item_name, qualities[int(quality)], craftability))
 
 conn.commit()
 conn.close()
