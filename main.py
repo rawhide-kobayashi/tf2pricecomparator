@@ -22,6 +22,7 @@ with open('settings.json') as json_transient:
 conn = sqlite3.connect('pricesheet.db')
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS common_items (
+            sku text PRIMARY KEY,
             defindex integer NOT NULL,
             item_name text NOT NULL,
             quality integer NOT NULL,
@@ -33,7 +34,7 @@ for keys in bp_spreadsheet['response']['items']:
     for x in bp_spreadsheet['response']['items'][item_name]['defindex']:
         # ignores tough break reskins and normal quality weapons present in this dataset.
         if len(bp_spreadsheet['response']['items'][item_name]['defindex']) == 1 or (35 <= x < 15000):
-            defindex = int(x)
+            defindex = x
             for values in bp_spreadsheet['response']['items'][item_name]['prices']:
                 quality = values
                 # noinspection PyAssignmentToLoopOrWithParameter
@@ -42,7 +43,12 @@ for keys in bp_spreadsheet['response']['items']:
                     print(item_name, defindex, quality, craftability)
                     print(int(quality))
                     print(qualities[int(quality)])
-                    c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?)', (defindex, item_name, qualities[int(quality)], craftability))
+                    if craftability == 'Craftable':
+                        sku = str(defindex) + ';' + quality
+                    else:
+                        sku = str(defindex) + ';' + quality + ';' + 'uncraftable'
+                    print(sku)
+                    c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?,?)', (sku, defindex, item_name, qualities[int(quality)], craftability))
 
 conn.commit()
 conn.close()
