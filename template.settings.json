@@ -1,5 +1,9 @@
 {
 	"API_Keys": {
 		"backpack.tf": ""
+	},
+	"Steam_Guard": {
+		"shared_secret": "",
+		"identity_secret": ""
 	}
 }
