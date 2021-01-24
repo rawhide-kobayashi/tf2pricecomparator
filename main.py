@@ -2,6 +2,7 @@ import json
 import requests
 import sqlite3
 import time
+import db_management
 
 qualities = {
     "Normal": 0,
@@ -42,91 +43,21 @@ craftableness = {
     "Craftable": 1
 }
 
-# import test json file
-with open('test data set.json') as json_transient:
-    bp_spreadsheet = json.load(json_transient)
-    del json_transient
-
 with open('settings.json') as json_transient:
     settings = json.load(json_transient)
-    del json_transient
-
-# url = 'https://backpack.tf/api/IGetPrices/v4?key=' + settings['API_Keys']['backpack.tf']
-
-# json_transient = requests.get(url)
-# bp_spreadsheet = json_transient.json()
-# del json_transient
 
 conn = sqlite3.connect('pricesheet.db')
 c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS common_items (
-            sku text PRIMARY KEY,
-            defindex integer NOT NULL,
-            item_name text NOT NULL,
-            quality text NOT NULL,
-            craftability text NOT NULL,
-            market_hash_name text NOT NULL)''')
 
-# iterate through the relevant fields in bp.tf's spreadsheet to make a basic catalog of commonly traded items.
-for keys in bp_spreadsheet['response']['items']:
-    item_name = keys
-    for x in bp_spreadsheet['response']['items'][item_name]['defindex']:
-        # ignores tough break reskins and default weapons present in this dataset.
-        if len(bp_spreadsheet['response']['items'][item_name]['defindex']) == 1 or (35 <= x < 15000):
-            defindex = x
-            for values in bp_spreadsheet['response']['items'][item_name]['prices']:
-                quality = values
-                # noinspection PyAssignmentToLoopOrWithParameter
-                for keys in bp_spreadsheet['response']['items'][item_name]['prices'][quality]['Tradable']:
-                    craftability = keys
-                    if craftability == 'Craftable':
-                        sku = str(defindex) + ';' + quality
-                    else:
-                        sku = str(defindex) + ';' + quality + ';uncraftable'
-                    if qualities[int(quality)] == 'Unique' or qualities[int(quality)] == 'Normal' or qualities[int(quality)] == 'rarity3':
-                        market_hash_name = item_name
-                    else:
-                        # noinspection PyTypeChecker
-                        market_hash_name = qualities[int(quality)] + ' ' + item_name
-                    print(market_hash_name)
-                    c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?,?,?)', (sku, defindex, item_name, qualities[int(quality)], craftability, market_hash_name))
+db_management.update_common_items_list()
+db_management.update_steam_market_pricelist()
 
-conn.commit()
-
-c.execute('''CREATE TABLE IF NOT EXISTS steam_market_pricing (
-            market_hash_name text PRIMARY KEY,
-            quantity integer NOT NULL,
-            lowest_price float NOT NULL,
-            last_updated integer NOT NULL)''')
-'''
-wheretostart = 0
-
-url = 'https://steamcommunity.com/market/search/render/?search_descriptions=0&sort_column=name&sort_dir=asc&norender=1&count=100&category_440_Collection%5B0%5D=any&category_440_Quality%5B0%5D=tag_Unique&category_440_Quality%5B1%5D=tag_strange&category_440_Quality%5B2%5D=tag_vintage&category_440_Quality%5B3%5D=tag_rarity1&category_440_Quality%5B4%5D=tag_haunted&category_440_Quality%5B5%5D=tag_collectors&appid=440&start=' + str(wheretostart)
-json_transient = requests.get(url)
-steam_market_listings = json_transient.json()
-del json_transient
-
-while len(steam_market_listings['results']) > 0:
-    for x in range(len(steam_market_listings['results'])):
-        c.execute('INSERT OR REPLACE INTO steam_market_pricing VALUES (?,?,?,?)', (steam_market_listings['results'][x]['hash_name'], steam_market_listings['results'][x]['sell_listings'], steam_market_listings['results'][x]['sell_price_text'].translate(str.maketrans({'$': ''})), int(time.time())))
-
-    conn.commit()
-    wheretostart += 100
-    time.sleep(30)
-    print(wheretostart)
-
-    url = 'https://steamcommunity.com/market/search/render/?search_descriptions=0&sort_column=name&sort_dir=asc&norender=1&count=100&category_440_Collection%5B0%5D=any&category_440_Quality%5B0%5D=tag_Unique&category_440_Quality%5B1%5D=tag_strange&category_440_Quality%5B2%5D=tag_vintage&category_440_Quality%5B3%5D=tag_rarity1&category_440_Quality%5B4%5D=tag_haunted&category_440_Quality%5B5%5D=tag_collectors&appid=440&start=' + str(wheretostart)
-    json_transient = requests.get(url)
-    steam_market_listings = json_transient.json()
-    del json_transient
-'''
 countsofarbitrate = 0
 totalcount = 0
 
 url = 'https://steamcommunity.com/market/priceoverview/?appid=440&currency=1&market_hash_name=Mann%20Co.%20Supply%20Crate%20Key'
 json_transient = requests.get(url)
 steam_market_keys = json_transient.json()
-del json_transient
 
 for row in c.execute('SELECT * FROM common_items'):
     print(row)
@@ -139,7 +70,6 @@ for row in c.execute('SELECT * FROM common_items'):
 
     json_transient = requests.get(url)
     bp_classifieds = json_transient.json()
-    del json_transient
 
     # traverse the listings in reverse order and delete those that are from real people
     # or haven't been bumped in the last 30 minutes.
