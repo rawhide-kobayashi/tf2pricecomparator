@@ -64,7 +64,8 @@ c.execute('''CREATE TABLE IF NOT EXISTS common_items (
             defindex integer NOT NULL,
             item_name text NOT NULL,
             quality text NOT NULL,
-            craftability text NOT NULL)''')
+            craftability text NOT NULL,
+            market_hash_name text NOT NULL)''')
 
 # iterate through the relevant fields in bp.tf's spreadsheet to make a basic catalog of commonly traded items.
 for keys in bp_spreadsheet['response']['items']:
@@ -82,11 +83,50 @@ for keys in bp_spreadsheet['response']['items']:
                         sku = str(defindex) + ';' + quality
                     else:
                         sku = str(defindex) + ';' + quality + ';uncraftable'
-                    c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?,?)', (sku, defindex, item_name, qualities[int(quality)], craftability))
+                    if qualities[int(quality)] == 'Unique' or qualities[int(quality)] == 'Normal' or qualities[int(quality)] == 'rarity3':
+                        market_hash_name = item_name
+                    else:
+                        # noinspection PyTypeChecker
+                        market_hash_name = qualities[int(quality)] + ' ' + item_name
+                    print(market_hash_name)
+                    c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?,?,?)', (sku, defindex, item_name, qualities[int(quality)], craftability, market_hash_name))
 
 conn.commit()
 
+c.execute('''CREATE TABLE IF NOT EXISTS steam_market_pricing (
+            market_hash_name text PRIMARY KEY,
+            quantity integer NOT NULL,
+            lowest_price float NOT NULL,
+            last_updated integer NOT NULL)''')
+'''
+wheretostart = 0
+
+url = 'https://steamcommunity.com/market/search/render/?search_descriptions=0&sort_column=name&sort_dir=asc&norender=1&count=100&category_440_Collection%5B0%5D=any&category_440_Quality%5B0%5D=tag_Unique&category_440_Quality%5B1%5D=tag_strange&category_440_Quality%5B2%5D=tag_vintage&category_440_Quality%5B3%5D=tag_rarity1&category_440_Quality%5B4%5D=tag_haunted&category_440_Quality%5B5%5D=tag_collectors&appid=440&start=' + str(wheretostart)
+json_transient = requests.get(url)
+steam_market_listings = json_transient.json()
+del json_transient
+
+while len(steam_market_listings['results']) > 0:
+    for x in range(len(steam_market_listings['results'])):
+        c.execute('INSERT OR REPLACE INTO steam_market_pricing VALUES (?,?,?,?)', (steam_market_listings['results'][x]['hash_name'], steam_market_listings['results'][x]['sell_listings'], steam_market_listings['results'][x]['sell_price_text'].translate(str.maketrans({'$': ''})), int(time.time())))
+
+    conn.commit()
+    wheretostart += 100
+    time.sleep(30)
+    print(wheretostart)
+
+    url = 'https://steamcommunity.com/market/search/render/?search_descriptions=0&sort_column=name&sort_dir=asc&norender=1&count=100&category_440_Collection%5B0%5D=any&category_440_Quality%5B0%5D=tag_Unique&category_440_Quality%5B1%5D=tag_strange&category_440_Quality%5B2%5D=tag_vintage&category_440_Quality%5B3%5D=tag_rarity1&category_440_Quality%5B4%5D=tag_haunted&category_440_Quality%5B5%5D=tag_collectors&appid=440&start=' + str(wheretostart)
+    json_transient = requests.get(url)
+    steam_market_listings = json_transient.json()
+    del json_transient
+'''
 countsofarbitrate = 0
+totalcount = 0
+
+url = 'https://steamcommunity.com/market/priceoverview/?appid=440&currency=1&market_hash_name=Mann%20Co.%20Supply%20Crate%20Key'
+json_transient = requests.get(url)
+steam_market_keys = json_transient.json()
+del json_transient
 
 for row in c.execute('SELECT * FROM common_items'):
     print(row)
@@ -111,36 +151,28 @@ for row in c.execute('SELECT * FROM common_items'):
         if 'automatic' not in bp_classifieds['sell']['listings'][x] or bp_classifieds['sell']['listings'][x]['bump'] < time.time() - 1800:
             del bp_classifieds['sell']['listings'][x]
 
-    if row[3] == 'Unique':
-        url = 'https://steamcommunity.com/market/priceoverview/?appid=440&currency=1&market_hash_name=' + row[2]
-    else:
-        url = 'https://steamcommunity.com/market/priceoverview/?appid=440&currency=1&market_hash_name=' + row[3] + ' ' + row[2]
-    print(url)
+    steam_cursor = conn.cursor()
 
-    json_transient = requests.get(url)
-    steam_market = json_transient.json()
-    del json_transient
-
-    url = 'https://steamcommunity.com/market/priceoverview/?appid=440&currency=1&market_hash_name=Mann%20Co.%20Supply%20Crate%20Key'
-    json_transient = requests.get(url)
-    steam_market_keys = json_transient.json()
-    del json_transient
+    steam_cursor.execute('SELECT * FROM steam_market_pricing WHERE market_hash_name = (?)', (row[5],))
+    steam_market_price_info = steam_cursor.fetchone()
 
     try:
-        if steam_market['success'] == True and 'keys' not in bp_classifieds['sell']['listings'][0]['currencies']:
-            if bp_classifieds['sell']['listings'][0]['currencies']['metal'] / 53.11 < ((float(steam_market['median_price'].translate(str.maketrans({'$': ''}))) / float(steam_market_keys['median_price'].translate(str.maketrans({'$': ''})))) * 0.85):
+        if 'keys' not in bp_classifieds['sell']['listings'][0]['currencies']:
+            if bp_classifieds['sell']['listings'][0]['currencies']['metal'] / 53.33 < ((steam_market_price_info[2] / float(steam_market_keys['median_price'].translate(str.maketrans({'$': ''})))) * 0.85):
                 print('arbitrate baby')
                 countsofarbitrate += 1
                 print(countsofarbitrate)
-            print(bp_classifieds['sell']['listings'][0]['currencies']['metal'] / 53.11)
-            print((float(steam_market['median_price'].translate(str.maketrans({'$': ''}))) / float(steam_market_keys['median_price'].translate(str.maketrans({'$': ''})))) * 0.85)
+            print(bp_classifieds['sell']['listings'][0]['currencies']['metal'] / 53.33)
+            print((steam_market_price_info[2] / float(steam_market_keys['median_price'].translate(str.maketrans({'$': ''})))) * 0.85)
     except IndexError:
-        print('no sell listings')
-    except KeyError:
-        print('not enough volume on the steam marketplace')
+        print('no sell listings on backpack.tf')
+    except TypeError:
+        print('no steam market listings')
 
-    time.sleep(10)
+    totalcount += 1
+    print(totalcount)
 
+    time.sleep(5)
 
 conn.close()
 
