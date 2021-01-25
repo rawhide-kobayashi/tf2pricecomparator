@@ -3,6 +3,10 @@ import requests
 import sqlite3
 import time
 import db_management
+import base64
+import hmac
+import struct
+from hashlib import sha1
 
 qualities = {
     "Normal": 0,
@@ -43,21 +47,18 @@ craftableness = {
     "Craftable": 1
 }
 
-with open('settings.json') as json_transient:
-    settings = json.load(json_transient)
+settings = json.load(open('settings.json'))
 
 conn = sqlite3.connect('pricesheet.db')
 c = conn.cursor()
 
-db_management.update_common_items_list()
-db_management.update_steam_market_pricelist()
+db_management.db_thread_manager()
 
 countsofarbitrate = 0
 totalcount = 0
 
 url = 'https://steamcommunity.com/market/priceoverview/?appid=440&currency=1&market_hash_name=Mann%20Co.%20Supply%20Crate%20Key'
-json_transient = requests.get(url)
-steam_market_keys = json_transient.json()
+steam_market_keys = requests.get(url).json()
 
 for row in c.execute('SELECT * FROM common_items'):
     print(row)
@@ -68,8 +69,7 @@ for row in c.execute('SELECT * FROM common_items'):
         url += '&australium=-1'
     print(url)
 
-    json_transient = requests.get(url)
-    bp_classifieds = json_transient.json()
+    bp_classifieds = requests.get(url).json()
 
     # traverse the listings in reverse order and delete those that are from real people
     # or haven't been bumped in the last 30 minutes.
@@ -105,13 +105,6 @@ for row in c.execute('SELECT * FROM common_items'):
     time.sleep(5)
 
 conn.close()
-
-
-import base64
-import hmac
-import struct
-from hashlib import sha1
-
 
 # magical bullshit that i don't understand, but you get a guard code
 time_hmac = hmac.new(base64.b64decode(settings['Steam_Guard']['shared_secret']), struct.pack('>Q', int(time.time()) // 30), digestmod=sha1).digest()

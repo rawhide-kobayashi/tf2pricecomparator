@@ -2,6 +2,7 @@ import requests
 import sqlite3
 import json
 import time
+import threading
 
 qualities = {
     "Normal": 0,
@@ -42,14 +43,15 @@ craftableness = {
     "Craftable": 1
 }
 
-with open('settings.json') as json_transient:
-    settings = json.load(json_transient)
+settings = json.load(open('settings.json'))
+
 
 def update_common_items_list():
     conn = sqlite3.connect('pricesheet.db')
     c = conn.cursor()
     c.execute('SELECT name FROM sqlite_master WHERE type="table"')
     if c.fetchone() is None:
+        c.execute("PRAGMA journal_mode=WAL")
         c.execute('''CREATE TABLE common_items (
                     sku text PRIMARY KEY,
                     defindex integer NOT NULL,
@@ -69,56 +71,64 @@ def update_common_items_list():
     c.execute('SELECT max("last_updated") FROM common_items')
     last_updated = c.fetchone()
 
-    url = 'https://backpack.tf/api/IGetPrices/v4?key=' + settings['API_Keys']['backpack.tf'] + '&since=' + str(last_updated[0])
+    while True:
+        url = 'https://backpack.tf/api/IGetPrices/v4?key=' + settings['API_Keys']['backpack.tf'] + '&since=' + str(last_updated[0])
 
-    json_transient = requests.get(url)
-    bp_spreadsheet = json_transient.json()
+        bp_spreadsheet = requests.get(url).json()
 
-    # iterate through the relevant fields in bp.tf's spreadsheet to make a basic catalog of commonly traded items.
-    for keys in bp_spreadsheet['response']['items']:
-        item_name = keys
-        for x in bp_spreadsheet['response']['items'][item_name]['defindex']:
-            # ignores tough break reskins and default weapons present in this dataset.
-            if len(bp_spreadsheet['response']['items'][item_name]['defindex']) == 1 or (35 <= x < 15000):
-                defindex = x
-                for values in bp_spreadsheet['response']['items'][item_name]['prices']:
-                    quality = values
-                    # noinspection PyAssignmentToLoopOrWithParameter
-                    for keys in bp_spreadsheet['response']['items'][item_name]['prices'][quality]['Tradable']:
-                        craftability = keys
-                        if craftability == 'Craftable':
-                            sku = str(defindex) + ';' + quality
-                        else:
-                            sku = str(defindex) + ';' + quality + ';uncraftable'
-                        if qualities[int(quality)] == 'Unique' or qualities[int(quality)] == 'Normal' or qualities[int(quality)] == 'rarity3':
-                            market_hash_name = item_name
-                        else:
-                            # noinspection PyTypeChecker
-                            market_hash_name = qualities[int(quality)] + ' ' + item_name
-                        if 'Australium' in item_name:
-                            sku += ';australium'
-                        c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?,?,?,?)', (sku, defindex, item_name, qualities[int(quality)], craftability, market_hash_name, int(time.time())))
+        # iterate through the relevant fields in bp.tf's spreadsheet to make a basic catalog of commonly traded items.
+        for keys in bp_spreadsheet['response']['items']:
+            item_name = keys
+            for x in bp_spreadsheet['response']['items'][item_name]['defindex']:
+                # ignores tough break reskins and default weapons present in this dataset.
+                if len(bp_spreadsheet['response']['items'][item_name]['defindex']) == 1 or (35 <= x < 15000):
+                    defindex = x
+                    for values in bp_spreadsheet['response']['items'][item_name]['prices']:
+                        quality = values
+                        # noinspection PyAssignmentToLoopOrWithParameter
+                        for keys in bp_spreadsheet['response']['items'][item_name]['prices'][quality]['Tradable']:
+                            craftability = keys
+                            if craftability == 'Craftable':
+                                sku = str(defindex) + ';' + quality
+                            else:
+                                sku = str(defindex) + ';' + quality + ';uncraftable'
+                            if qualities[int(quality)] == 'Unique' or qualities[int(quality)] == 'Normal' or qualities[int(quality)] == 'rarity3':
+                                market_hash_name = item_name
+                            else:
+                                # noinspection PyTypeChecker
+                                market_hash_name = qualities[int(quality)] + ' ' + item_name
+                            if 'Australium' in item_name:
+                                sku += ';australium'
+                            c.execute('INSERT OR REPLACE INTO common_items VALUES (?,?,?,?,?,?,?)', (sku, defindex, item_name, qualities[int(quality)], craftability, market_hash_name, int(time.time())))
 
-    conn.commit()
+        conn.commit()
+        time.sleep(86400)
 
 def update_steam_market_pricelist():
     conn = sqlite3.connect('pricesheet.db')
     c = conn.cursor()
 
-    wheretostart = 0
-
-    url = 'https://steamcommunity.com/market/search/render/?search_descriptions=0&sort_column=name&sort_dir=asc&norender=1&count=100&category_440_Collection%5B0%5D=any&category_440_Quality%5B0%5D=tag_Unique&category_440_Quality%5B1%5D=tag_strange&category_440_Quality%5B2%5D=tag_vintage&category_440_Quality%5B3%5D=tag_rarity1&category_440_Quality%5B4%5D=tag_haunted&category_440_Quality%5B5%5D=tag_collectors&appid=440&start=' + str(wheretostart)
-    json_transient = requests.get(url)
-    steam_market_listings = json_transient.json()
-
-    while len(steam_market_listings['results']) > 0:
-        for x in range(len(steam_market_listings['results'])):
-            c.execute('INSERT OR REPLACE INTO steam_market_pricing VALUES (?,?,?,?)', (steam_market_listings['results'][x]['hash_name'], steam_market_listings['results'][x]['sell_listings'], steam_market_listings['results'][x]['sell_price_text'].translate(str.maketrans({'$': ''})), int(time.time())))
-
-        conn.commit()
-        wheretostart += 100
-        time.sleep(30)
+    while True:
+        wheretostart = 0
 
         url = 'https://steamcommunity.com/market/search/render/?search_descriptions=0&sort_column=name&sort_dir=asc&norender=1&count=100&category_440_Collection%5B0%5D=any&category_440_Quality%5B0%5D=tag_Unique&category_440_Quality%5B1%5D=tag_strange&category_440_Quality%5B2%5D=tag_vintage&category_440_Quality%5B3%5D=tag_rarity1&category_440_Quality%5B4%5D=tag_haunted&category_440_Quality%5B5%5D=tag_collectors&appid=440&start=' + str(wheretostart)
-        json_transient = requests.get(url)
-        steam_market_listings = json_transient.json()
+        steam_market_listings = requests.get(url).json()
+
+        while len(steam_market_listings['results']) > 0:
+            for x in range(len(steam_market_listings['results'])):
+                c.execute('INSERT OR REPLACE INTO steam_market_pricing VALUES (?,?,?,?)', (steam_market_listings['results'][x]['hash_name'], steam_market_listings['results'][x]['sell_listings'], steam_market_listings['results'][x]['sell_price_text'].translate(str.maketrans({'$': ''})), int(time.time())))
+
+            conn.commit()
+            wheretostart += 100
+            time.sleep(30)
+
+            url = 'https://steamcommunity.com/market/search/render/?search_descriptions=0&sort_column=name&sort_dir=asc&norender=1&count=100&category_440_Collection%5B0%5D=any&category_440_Quality%5B0%5D=tag_Unique&category_440_Quality%5B1%5D=tag_strange&category_440_Quality%5B2%5D=tag_vintage&category_440_Quality%5B3%5D=tag_rarity1&category_440_Quality%5B4%5D=tag_haunted&category_440_Quality%5B5%5D=tag_collectors&appid=440&start=' + str(wheretostart)
+            steam_market_listings = requests.get(url).json()
+        time.sleep(14400)
+
+def db_thread_manager():
+    common_items_update = threading.Thread(target=update_common_items_list, daemon=True)
+    time.sleep(5)  # wait a second for DB creation in case it's the first run
+    steam_market_price_update = threading.Thread(target=update_steam_market_pricelist, daemon=True)
+    common_items_update.start()
+    steam_market_price_update.start()
