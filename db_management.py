@@ -104,6 +104,7 @@ def update_common_items_list():
         conn.commit()
         time.sleep(86400)
 
+
 def update_steam_market_pricelist():
     conn = sqlite3.connect('pricesheet.db')
     c = conn.cursor()
@@ -125,6 +126,7 @@ def update_steam_market_pricelist():
             url = 'https://steamcommunity.com/market/search/render/?search_descriptions=0&sort_column=name&sort_dir=asc&norender=1&count=100&category_440_Collection%5B0%5D=any&category_440_Quality%5B0%5D=tag_Unique&category_440_Quality%5B1%5D=tag_strange&category_440_Quality%5B2%5D=tag_vintage&category_440_Quality%5B3%5D=tag_rarity1&category_440_Quality%5B4%5D=tag_haunted&category_440_Quality%5B5%5D=tag_collectors&appid=440&start=' + str(wheretostart)
             steam_market_listings = requests.get(url).json()
         time.sleep(14400)
+
 
 def db_thread_manager():
     common_items_update = threading.Thread(target=update_common_items_list, daemon=True)
