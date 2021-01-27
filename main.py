@@ -3,10 +3,6 @@ import requests
 import sqlite3
 import time
 import db_management
-import base64
-import hmac
-import struct
-from hashlib import sha1
 
 qualities = {
     "Normal": 0,
@@ -48,6 +44,13 @@ craftableness = {
 }
 
 settings = json.load(open('settings.json'))
+
+from steampy.client import SteamClient
+
+steam_client = SteamClient(settings['API_Keys']['steam'])
+steam_client.login(settings['Credentials']['username'], settings['Credentials']['password'], settings['Credentials']['steam_guard_file'])
+print(steam_client.get_trade_offers_summary())
+steam_client.logout()
 
 conn = sqlite3.connect('pricesheet.db')
 c = conn.cursor()
@@ -105,16 +108,3 @@ for row in c.execute('SELECT * FROM common_items'):
     time.sleep(5)
 
 conn.close()
-
-# magical bullshit that i don't understand, but you get a guard code
-time_hmac = hmac.new(base64.b64decode(settings['Steam_Guard']['shared_secret']), struct.pack('>Q', int(time.time()) // 30), digestmod=sha1).digest()
-ordered = ord(time_hmac[19:20]) & 0xf
-full_code = struct.unpack('>I', time_hmac[ordered:ordered + 4])[0] & 0x7fffffff
-chars = '23456789BCDFGHJKMNPQRTVWXY'
-code = ''
-
-for _ in range(5):
-    full_code, i = divmod(full_code, len(chars))
-    code += chars[i]
-
-print(code)

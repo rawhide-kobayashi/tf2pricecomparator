@@ -1,3 +1,6 @@
 /settings.json
 /venv/
 /pricesheet.db
+/*.maFile
+/pricesheet.db-shm
+/pricesheet.db-wal
