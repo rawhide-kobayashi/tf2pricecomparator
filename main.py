@@ -3,6 +3,7 @@ import requests
 import sqlite3
 import time
 import db_management
+import subprocess
 
 qualities = {
     "Normal": 0,
